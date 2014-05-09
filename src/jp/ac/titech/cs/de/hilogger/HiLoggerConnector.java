@@ -10,6 +10,8 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Properties;
 
 import org.slf4j.Logger;
@@ -32,8 +34,8 @@ public class HiLoggerConnector {
 	private long measurementInterval;
 	private long takeInterval;
 
-	private long startTime;
-	private long endTime;
+	private Date startTime;
+	private Date endTime;
 	private boolean isConnecting;
 	private int dataLength;
 //	private ArrayList<ArrayList<Double>> volt = new ArrayList<ArrayList<Double>>(); // 取得した電圧
@@ -84,7 +86,8 @@ public class HiLoggerConnector {
 				+ ", measurementInterval: " + measurementInterval);
 		startConnection();
 
-		startTime = System.currentTimeMillis();
+		Calendar cal = Calendar.getInstance();
+		startTime = cal.getTime();
 
 		System.out.println("start time: " + startTime);
 
@@ -154,7 +157,8 @@ public class HiLoggerConnector {
 			isConnecting = false;
 		}
 		
-		endTime = System.currentTimeMillis();
+		Calendar cal = Calendar.getInstance();
+		endTime = cal.getTime();
 
 		try {
 			if (socket != null) {
@@ -171,11 +175,11 @@ public class HiLoggerConnector {
 		socket = null;
 	}
 
-	public long getStartTime() {
+	public Date getStartTime() {
 		return startTime;
 	}
 
-	public long getEndTime() {
+	public Date getEndTime() {
 		return endTime;
 	}
 
