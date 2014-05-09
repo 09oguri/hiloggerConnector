@@ -32,17 +32,21 @@ public class Command {
 	
 	// データ要求コマンド1stのサンプリング番号を1つ増やす
 	public static void incRequireDataCommand() {
-		for(int i = 12; i > 5; i--) {
+		// サンプリング番号の開始位置
+		int sampNumStart = 5;
+		// サンプリング番号の終端位置
+		int sampNumEnd = 12;
+		for(int i = sampNumEnd; i > sampNumStart; i--) {
 			if(REQUIRE_DATA[i] == 0xffffffff) {
 				REQUIRE_DATA[i] = 0x00000000;
 				REQUIRE_DATA[i - 1]++;
 				if(REQUIRE_DATA[i - 1] != 0xffffffff) {
 					break;
 				}
-			}else if(REQUIRE_DATA[5] == 0xffffffff) {
+			}else if(REQUIRE_DATA[sampNumStart] == 0xffffffff) {
 				return;
 			}else {
-				REQUIRE_DATA[12]++;
+				REQUIRE_DATA[sampNumEnd]++;
 				break;
 			}
 		}
