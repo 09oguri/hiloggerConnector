@@ -220,23 +220,12 @@ public class HiLoggerConnector {
 
 			// 状態が変化するのを待つ
 			Thread.sleep(1000);
-			byte state = (byte) 0xff;
-			while (state != 65) {
-				byte[] rawData = command(Command.REQUIRE_STATE);
-				Response res = new Response(rawData);
-				state = res.getState();
-			}
-			state = (byte) 0xff;
+			waitStateChange(65); // TODO magic number
 
 			// システムトリガー
 			command(Command.SYSTRIGGER);
 			Thread.sleep(1000);
-			while (state != 35) {
-				byte[] rawData = command(Command.REQUIRE_STATE);
-				Response res = new Response(rawData);
-				state = res.getState();
-			}
-			state = (byte) 0xff;
+			waitStateChange(35); // TODO magic number
 
 			// データ要求
 			// TODO 電圧データの取得方法を検討
@@ -263,6 +252,16 @@ public class HiLoggerConnector {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 			System.exit(1);
+		}
+	}
+
+	// メモリハイロガーの状態が引数で与えられた状態に遷移するまで待つ
+	private void waitStateChange(int expectedState) {
+		byte state = (byte) 0xff;
+		while (state != expectedState) {
+			byte[] rawData = command(Command.REQUIRE_STATE);
+			Response res = new Response(rawData);
+			state = res.getState();
 		}
 	}
 
