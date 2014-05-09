@@ -38,7 +38,12 @@ public class HiLoggerConnector {
 	private int dataLength;
 	private ArrayList<ArrayList<Double>> volt = new ArrayList<ArrayList<Double>>(); // 取得した電圧
 	private ArrayList<ArrayList<Double>> power = new ArrayList<ArrayList<Double>>(); // 電圧から計算した消費電力
-	private LogPowerThread lpt = new LogPowerThread();
+	private PowerLogger lpt = new PowerLogger();
+
+	/*
+	 * ロック用オブジェクト
+	 */
+	private Object lock = new Object();
 
 	private Socket socket;
 	private InputStream is;
@@ -81,51 +86,53 @@ public class HiLoggerConnector {
 		lpt.start();
 	}
 
-	class LogPowerThread extends Thread {
+	class PowerLogger extends Thread {
 		public void run() {
 			long sumNumOfData = 0L;
 			long numOfData = takeInterval / measurementInterval;
 
-			while (isConnecting) {
-				long before = System.currentTimeMillis();
-				byte[] rec = command(Command.REQUIRE_DATA); // データ要求コマンド
-				Response res = new Response(rec);
+			synchronized (lock) {
+				while (isConnecting) {
+					long before = System.currentTimeMillis();
+					byte[] rec = command(Command.REQUIRE_DATA); // データ要求コマンド
+					Response res = new Response(rec);
 
-				for (int i = 0; i < numOfData; i++) {
-					getData();
-				}
+					for (int i = 0; i < numOfData; i++) {
+						getData();
+					}
 
-				// ログ書き込み
-				boolean carry = false;
-				for (int unit = 0; unit < MAX_UNIT; unit++) {
-					for (int disk = 0; disk < MAX_CH / 2; disk++) {
-						synchronized (this) {
-							if (carry) {
-								disk++;
-								carry = false;
+					// ログ書き込み
+					boolean carry = false;
+					for (int unit = 0; unit < MAX_UNIT; unit++) {
+						for (int disk = 0; disk < MAX_CH / 2; disk++) {
+							synchronized (this) {
+								if (carry) {
+									disk++;
+									carry = false;
+								}
+								int driveId = unit * MAX_UNIT + disk;
+								logger.info("{},{},{}", before, driveId, power
+										.get(unit).get(0));
+								power.get(unit).remove(0);
 							}
-							int driveId = unit * MAX_UNIT + disk;
-							logger.info("{},{},{}", before, driveId,
-									power.get(unit).get(0));
-							power.get(unit).remove(0);
 						}
+						carry = true;
 					}
-					carry = true;
-				}
 
-				sumNumOfData += numOfData;
-				long after = System.currentTimeMillis();
+					sumNumOfData += numOfData;
+					long after = System.currentTimeMillis();
 
-				// 遅延解消
-				try {
-					// メモリ内データがなくなるのを防ぐために1秒は必ず遅れる
-					if (res.getNumOfData() < sumNumOfData + numOfData) {
-						Thread.sleep(takeInterval);
-					} else {
-						Thread.sleep(takeInterval - (after - before));
+					// 遅延解消
+					try {
+						// メモリ内データがなくなるのを防ぐために1秒は必ず遅れる
+						if (res.getNumOfData() < sumNumOfData + numOfData) {
+							Thread.sleep(takeInterval);
+						} else {
+							Thread.sleep(takeInterval - (after - before));
+						}
+					} catch (InterruptedException e) {
+						e.printStackTrace();
 					}
-				} catch (InterruptedException e) {
-					e.printStackTrace();
 				}
 			}
 		}
