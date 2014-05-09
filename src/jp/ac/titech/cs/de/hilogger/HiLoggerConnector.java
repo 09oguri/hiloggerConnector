@@ -36,8 +36,9 @@ public class HiLoggerConnector {
 	private long endTime;
 	private boolean isConnecting;
 	private int dataLength;
-	private ArrayList<ArrayList<Double>> volt = new ArrayList<ArrayList<Double>>(); // 取得した電圧
-	private ArrayList<ArrayList<Double>> power = new ArrayList<ArrayList<Double>>(); // 電圧から計算した消費電力
+//	private ArrayList<ArrayList<Double>> volt = new ArrayList<ArrayList<Double>>(); // 取得した電圧
+//	private ArrayList<ArrayList<Double>> power = new ArrayList<ArrayList<Double>>(); // 電圧から計算した消費電力
+	private ArrayList<DrivePowerResult> results = new ArrayList<DrivePowerResult>();
 	private PowerLogger lpt = new PowerLogger();
 
 	/*
@@ -64,9 +65,13 @@ public class HiLoggerConnector {
 			this.takeInterval = Long.parseLong(config
 					.getProperty("hilogger.info.takeInterval"));
 
-			for (int i = 0; i < MAX_UNIT; i++) {
-				this.volt.add(new ArrayList<Double>());
-				this.power.add(new ArrayList<Double>());
+//			for (int i = 0; i < MAX_UNIT; i++) {
+//				this.volt.add(new ArrayList<Double>());
+//				this.power.add(new ArrayList<Double>());
+//			}
+			int maxDriveNum = MAX_CH / 2 * MAX_UNIT;
+			for(int i = 0; i < maxDriveNum; i++) {
+				this.results.add(new DrivePowerResult());
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -102,21 +107,25 @@ public class HiLoggerConnector {
 					}
 
 					// ログ書き込み
-					boolean carry = false;
-					for (int unit = 0; unit < MAX_UNIT; unit++) {
-						for (int disk = 0; disk < MAX_CH / 2; disk++) {
-							synchronized (this) {
-								if (carry) {
-									disk++;
-									carry = false;
-								}
-								int driveId = unit * MAX_UNIT + disk;
-								logger.info("{},{},{}", before, driveId, power
-										.get(unit).get(0));
-								power.get(unit).remove(0);
-							}
-						}
-						carry = true;
+//					boolean carry = false;
+//					for (int unit = 0; unit < MAX_UNIT; unit++) {
+//						for (int disk = 0; disk < MAX_CH / 2; disk++) {
+//							synchronized (this) {
+//								if (carry) {
+//									disk++;
+//									carry = false;
+//								}
+//								int driveId = unit * MAX_UNIT + disk;
+//								logger.info("{},{},{}", before, driveId, power
+//										.get(unit).get(0));
+//								power.get(unit).remove(0);
+//							}
+//						}
+//						carry = true;
+//					}
+					
+					for(int driveId = 0; driveId < results.size(); driveId++) {
+						logger.info("{},{},{}", before, driveId, results.get(driveId).getTmpPower());
 					}
 
 					sumNumOfData += numOfData;
@@ -170,24 +179,30 @@ public class HiLoggerConnector {
 		return endTime;
 	}
 
-	// TODO
 	public int[] getDriveIds() {
-		int[] driveIds = { 0, 1 };
+		int[] driveIds = new int[results.size()];
+		for(int i = 0; i < driveIds.length; i++) {
+			driveIds[i] = i;
+		}
+		
 		return driveIds;
 	}
 
-	// TODO
-	public double getDrivePower() {
-		return 0.0;
+	public double getDrivePower(int driveId) {
+		return results.get(driveId).getTotalPower();
 	}
 
 	public synchronized double getTotalPower() {
 		double totalPower = 0.0;
-		for (ArrayList<Double> unitPowers : power) {
-			for (Double unitPower : unitPowers) {
-				totalPower += unitPower;
-			}
+//		for (ArrayList<Double> unitPowers : power) {
+//			for (Double unitPower : unitPowers) {
+//				totalPower += unitPower;
+//			}
+//		}
+		for(DrivePowerResult result : results) {
+			totalPower += result.getTotalPower();
 		}
+		
 		return totalPower;
 	}
 
@@ -228,12 +243,12 @@ public class HiLoggerConnector {
 			command(Command.START);
 
 			// 状態が変化するのを待つ
-			Thread.sleep(1000);
+			Thread.sleep(1000);	// TODO sleepもwaitStateChangeの中で行う
 			waitStateChange(65); // TODO magic number
 
 			// システムトリガー
 			command(Command.SYSTRIGGER);
-			Thread.sleep(1000);
+			Thread.sleep(1000);	// TODO sleepもwaitStateChangeの中で行う
 			waitStateChange(35); // TODO magic number
 
 			// データ要求
@@ -306,14 +321,14 @@ public class HiLoggerConnector {
 		}
 	}
 
-	// TODO Responseにまとめる
 	// MemoryHiLoggerから電圧データを受け取り消費電力を計算
 	private void getData() {
-		byte[] raw = new byte[dataLength];
+		byte[] rawData = new byte[dataLength];
 		try {
-			bis.read(raw);
-			getVolt(raw);
-			getPower();
+			bis.read(rawData);
+//			getVolt(raw);
+//			getPower();
+			calcPower(new Response(rawData));
 			Command.incRequireDataCommand();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -321,54 +336,72 @@ public class HiLoggerConnector {
 		}
 	}
 
-	// 生データから電圧リストを取得
-	private void getVolt(byte[] rec) {
-		String raw = "";
-		int index = 21;
+//	// 生データから電圧リストを取得
+//	private void getVolt(byte[] rec) {
+//		String raw = "";
+//		int index = 21;
+//
+//		if (rec[0] == 0x01 && rec[1] == 0x00 && rec[2] == 0x01) { // データ転送コマンド
+//			for (int unit = 1; unit < 9; unit++) {
+//				for (int ch = 1; ch < 17; ch++) {
+//					for (int i = 0; i < 4; i++) { // 個々の電圧
+//						if (ch <= MAX_CH && unit <= MAX_UNIT) {
+//							raw += String.format("%02x", rec[index]);
+//						}
+//						index++;
+//					}
+//					if (ch <= MAX_CH && unit <= MAX_UNIT) {
+//						// 電圧値に変換(スライドp47)
+//						// 電圧軸レンジ
+//						// 資料： 1(V/10DIV)
+//						// ロガーユーティリティ： 100 mv f.s. -> 0.1(V/10DIV)???
+//						volt.get(unit - 1)
+//								.add(((double) Integer.parseInt(raw, 16) - 32768.0) * 0.1 / 20000.0);
+//					}
+//					raw = "";
+//				}
+//			}
+//		} else { // データ転送コマンドでない場合
+//			System.out.println("NULL");	// TODO exceptionにする
+//			volt = null;
+//		}
+//	}
 
-		if (rec[0] == 0x01 && rec[1] == 0x00 && rec[2] == 0x01) { // データ転送コマンド
-			for (int unit = 1; unit < 9; unit++) {
-				for (int ch = 1; ch < 17; ch++) {
-					for (int i = 0; i < 4; i++) { // 個々の電圧
-						if (ch <= MAX_CH && unit <= MAX_UNIT) {
-							raw += String.format("%02x", rec[index]);
-						}
-						index++;
-					}
-					if (ch <= MAX_CH && unit <= MAX_UNIT) {
-						// 電圧値に変換(スライドp47)
-						// 電圧軸レンジ
-						// 資料： 1(V/10DIV)
-						// ロガーユーティリティ： 100 mv f.s. -> 0.1(V/10DIV)???
-						volt.get(unit - 1)
-								.add(((double) Integer.parseInt(raw, 16) - 32768.0) * 0.1 / 20000.0);
-					}
-					raw = "";
-				}
+	private void calcPower(Response res) {
+		int driveId = 0;
+		
+		for(int unit = 1; unit < MAX_UNIT + 1; unit++) {
+			for(int ch = 1; ch < MAX_CH + 1; ch++) {
+				double volt5 = res.getVolt(unit, ch);
+				double volt12 = res.getVolt(unit, ch + 1);
+				double power = Math.abs(volt5 * 50 + volt12 * 120);
+				
+				DrivePowerResult dpr = results.get(driveId);
+				dpr.setPower(power);
+				
+				ch++;
+				driveId++;
 			}
-		} else { // データ転送コマンドでない場合
-			System.out.println("NULL");
-			volt = null;
 		}
 	}
-
-	// 電圧リストから消費電力リストを取得
-	private void getPower() {
-		for (int unit = 0; unit < MAX_UNIT; unit++) {
-			int voltListSize = volt.get(unit).size();
-
-			if (voltListSize % 2 != 0) {
-				voltListSize--;
-			}
-			for (int i = 0; i < voltListSize; i += 2) {
-				// TODO どっちのチャンネルが12Vか5Vかを判別できるようにする必要がある
-				// ch1が赤5V線、ch2が黄12V線
-				power.get(unit).add(
-						Math.abs((Double) volt.get(unit).get(i)) * 50.0
-								+ Math.abs((Double) volt.get(unit).get(i + 1))
-								* 120.0);
-			}
-			volt.get(unit).clear();
-		}
-	}
+	
+//	// 電圧リストから消費電力リストを取得
+//	private void getPower() {
+//		for (int unit = 0; unit < MAX_UNIT; unit++) {
+//			int voltListSize = volt.get(unit).size();
+//
+//			if (voltListSize % 2 != 0) {
+//				voltListSize--;
+//			}
+//			for (int i = 0; i < voltListSize; i += 2) {
+//				// TODO どっちのチャンネルが12Vか5Vかを判別できるようにする必要がある
+//				// ch1が赤5V線、ch2が黄12V線
+//				power.get(unit).add(
+//						Math.abs((Double) volt.get(unit).get(i)) * 50.0
+//								+ Math.abs((Double) volt.get(unit).get(i + 1))
+//								* 120.0);
+//			}
+//			volt.get(unit).clear();
+//		}
+//	}
 }
