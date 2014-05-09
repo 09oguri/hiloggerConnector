@@ -141,8 +141,10 @@ public class HiLoggerConnector {
 	public void stop() {
 		command(Command.STOP);
 
-		isConnecting = false;
-
+		synchronized(lock) {
+			isConnecting = false;
+		}
+		
 		endTime = System.currentTimeMillis();
 
 		try {
