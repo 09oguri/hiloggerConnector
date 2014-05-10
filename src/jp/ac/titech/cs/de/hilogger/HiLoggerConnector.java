@@ -2,11 +2,15 @@ package jp.ac.titech.cs.de.hilogger;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -14,12 +18,12 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Properties;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
 
 public class HiLoggerConnector {
-	private static Logger logger = LoggerFactory
-			.getLogger(HiLoggerConnector.class);
+//	private static Logger logger = LoggerFactory
+//			.getLogger(HiLoggerConnector.class);
 
 	// 計測するチャンネル数、ユニット数
 	// 変更する場合はロガーユーティリティでメモリハイロガーを再設定する必要がある
@@ -33,11 +37,13 @@ public class HiLoggerConnector {
 	private int port;
 	private long measurementInterval;
 	private long takeInterval;
+	private String logParentDirPath;
 
 	private Date startTime;
 	private Date endTime;
 	private boolean isConnecting;
 	private int dataLength;
+	private String logDirPath;
 //	private ArrayList<ArrayList<Double>> volt = new ArrayList<ArrayList<Double>>(); // 取得した電圧
 //	private ArrayList<ArrayList<Double>> power = new ArrayList<ArrayList<Double>>(); // 電圧から計算した消費電力
 	private ArrayList<DrivePowerResult> results = new ArrayList<DrivePowerResult>();
@@ -66,6 +72,7 @@ public class HiLoggerConnector {
 					.getProperty("hilogger.info.measurementInterval"));
 			this.takeInterval = Long.parseLong(config
 					.getProperty("hilogger.info.takeInterval"));
+			this.logParentDirPath = config.getProperty("hilogger.info.logParentDirPath");
 
 //			for (int i = 0; i < MAX_UNIT; i++) {
 //				this.volt.add(new ArrayList<Double>());
@@ -90,6 +97,12 @@ public class HiLoggerConnector {
 		startTime = cal.getTime();
 
 		System.out.println("start time: " + startTime);
+
+		long startMilliTime = cal.getTimeInMillis();
+		logDirPath = logParentDirPath + "/" + startMilliTime;
+
+		final File logDir = new File(logDirPath);
+		logDir.mkdirs();
 
 		lpt.start();
 	}
@@ -128,7 +141,17 @@ public class HiLoggerConnector {
 //					}
 					
 					for(int driveId = 0; driveId < results.size(); driveId++) {
-						logger.info("{},{},{}", before, driveId, results.get(driveId).getTmpPower());
+						PrintWriter out;
+						try {
+							out = new PrintWriter(new BufferedWriter(new FileWriter(logDirPath + "/" + driveId, true)));
+							out.println(before + "," + results.get(driveId).getTmpPower());
+							out.close();
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+
+//						logger.info("{},{},{}", before, driveId, results.get(driveId).getTmpPower());
 					}
 
 					sumNumOfData += numOfData;
@@ -165,6 +188,30 @@ public class HiLoggerConnector {
 				socket.close();
 			}
 		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		for(int driveId = 0; driveId < results.size(); driveId++) {
+			try {
+				PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(logDirPath + "/" + driveId, true)));
+				out.println("total:" + results.get(driveId).getTotalPower());
+				out.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+//			logger.info("{},{},{}", before, driveId, results.get(driveId).getTmpPower());
+		}
+
+		try {
+			PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(logDirPath + "/ykstorage")));
+			out.println("start time: " + getStartTime());
+			out.println("end time: " + getEndTime());
+			out.println("total: " + getTotalPower());
+			out.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
