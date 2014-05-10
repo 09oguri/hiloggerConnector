@@ -112,34 +112,18 @@ public class HiLoggerConnector {
 			long sumNumOfData = 0L;
 			long numOfData = takeInterval / measurementInterval;
 
-			synchronized (lock) {
-				while (isConnecting) {
-					long before = System.currentTimeMillis();
-					byte[] rec = command(Command.REQUIRE_DATA); // データ要求コマンド
-					Response res = new Response(rec);
-
-					for (int i = 0; i < numOfData; i++) {
-						getData();
+			while (true) {
+				synchronized (lock) {
+					if(!isConnecting) {
+						break;
 					}
+				}
+				long before = System.currentTimeMillis();
+				byte[] rec = command(Command.REQUIRE_DATA); // データ要求コマンド
+				Response res = new Response(rec);
 
-					// ログ書き込み
-//					boolean carry = false;
-//					for (int unit = 0; unit < MAX_UNIT; unit++) {
-//						for (int disk = 0; disk < MAX_CH / 2; disk++) {
-//							synchronized (this) {
-//								if (carry) {
-//									disk++;
-//									carry = false;
-//								}
-//								int driveId = unit * MAX_UNIT + disk;
-//								logger.info("{},{},{}", before, driveId, power
-//										.get(unit).get(0));
-//								power.get(unit).remove(0);
-//							}
-//						}
-//						carry = true;
-//					}
-					
+				for (int i = 0; i < numOfData; i++) {
+					getData();
 					for(int driveId = 0; driveId < results.size(); driveId++) {
 						PrintWriter out;
 						try {
@@ -153,30 +137,51 @@ public class HiLoggerConnector {
 
 //						logger.info("{},{},{}", before, driveId, results.get(driveId).getTmpPower());
 					}
+				}
+				
 
-					sumNumOfData += numOfData;
-					long after = System.currentTimeMillis();
+				// ログ書き込み
+//				boolean carry = false;
+//				for (int unit = 0; unit < MAX_UNIT; unit++) {
+//					for (int disk = 0; disk < MAX_CH / 2; disk++) {
+//						synchronized (this) {
+//							if (carry) {
+//								disk++;
+//								carry = false;
+//							}
+//							int driveId = unit * MAX_UNIT + disk;
+//							logger.info("{},{},{}", before, driveId, power
+//									.get(unit).get(0));
+//							power.get(unit).remove(0);
+//						}
+//					}
+//					carry = true;
+//				}
 
-					// 遅延解消
-					try {
-						// メモリ内データがなくなるのを防ぐために1秒は必ず遅れる
-						if (res.getNumOfData() < sumNumOfData + numOfData) {
-							Thread.sleep(takeInterval);
-						} else {
-							Thread.sleep(takeInterval - (after - before));
+				sumNumOfData += numOfData;
+				long after = System.currentTimeMillis();
+
+				// 遅延解消
+				try {
+					// メモリ内データがなくなるのを防ぐために1秒は必ず遅れる
+					if (res.getNumOfData() < sumNumOfData + numOfData) {
+						Thread.sleep(takeInterval);
+					} else {
+						long delay = takeInterval - (after - before);
+						if(delay > 0) {
+							Thread.sleep(delay);
 						}
-					} catch (InterruptedException e) {
-						e.printStackTrace();
 					}
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
 			}
 		}
 	}
 
 	public void stop() {
-		command(Command.STOP);
-
 		synchronized(lock) {
+			command(Command.STOP);
 			isConnecting = false;
 		}
 		

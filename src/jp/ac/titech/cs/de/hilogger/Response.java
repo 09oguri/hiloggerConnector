@@ -78,7 +78,7 @@ public class Response {
 		// データ転送コマンドかどうか確認
 		if (rawData[0] == 0x01 && rawData[1] == 0x00 && rawData[2] == 0x01) {
 			String tmp = "";
-			for (int i = index; i < chDataSize; i++) {
+			for (int i = index; i < index + chDataSize; i++) {
 				tmp += String.format("%02x", rawData[i]);
 			}
 			// TODO 変換が正しいか確認
